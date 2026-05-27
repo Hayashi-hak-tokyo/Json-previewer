@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Viewer & Analyzer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        jsonKey: { light: '#4f46e5', dark: '#818cf8' },      // Indigo
+                        jsonString: { light: '#16a34a', dark: '#4ade80' },   // Green
+                        jsonNumber: { light: '#ea580c', dark: '#fb923c' },   // Orange
+                        jsonBoolean: { light: '#9333ea', dark: '#c084fc' },  // Purple
+                        jsonNull: { light: '#64748b', dark: '#94a3b8' }      // Slate
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* カスタムスクロールバー */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e4e4e7;
+            border-radius: 4px;
+        }
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #d4d4d8;
+        }
+        /* ツリービュー内のガイドライン */
+        .tree-line {
+            position: relative;
+        }
+        .tree-line::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background-color: rgba(156, 163, 175, 0.25);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-zinc-200 h-full flex flex-col font-sans transition-colors duration-200">
+
+    <!-- ヘッダー -->
+    <header class="border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-6 py-4 flex flex-wrap items-center justify-between gap-4 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-indigo-600 text-white rounded-lg shadow-md shadow-indigo-500/20">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                    JSONビューワー & アナライザー
+                    <span class="text-xs font-normal px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-full">v1.6</span>
+                </h1>
+                <p class="text-xs text-slate-500 dark:text-zinc-400">JSONの可視化、解析、変換、エラー検知を瞬時に実行</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- テーマ切り替え -->
+            <button id="themeToggle" class="p-2.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-700 transition" title="テーマ切り替え">
+                <!-- 太陽アイコン -->
+                <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 9H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m2.828-9.9a5 5 0 11-7.07 7.07l2.828-2.828z" />
+                </svg>
+                <!-- 月アイコン -->
+                <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-600 dark:text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+            </button>
+            <button id="dummyDataBtn" class="px-3 py-2 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 rounded-lg text-sm font-medium transition flex items-center gap-1.5 border border-slate-200 dark:border-zinc-700">
+                <span>サンプルJSON</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ領域 -->
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
+        
+        <!-- 左カラム：入力・エディタ -->
+        <section class="w-full md:w-1/2 flex flex-col border-r border-slate-200 dark:border-zinc-800 h-1/2 md:h-full bg-white dark:bg-zinc-900">
+            <!-- ツールバー -->
+            <div class="px-4 py-2.5 bg-slate-50 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between gap-2 flex-wrap text-sm shrink-0">
+                <div class="flex items-center space-x-2">
+                    <span class="font-bold text-slate-700 dark:text-zinc-300">入力 JSON</span>
+                    <span id="charCount" class="text-xs text-slate-400 dark:text-zinc-500">(0文字)</span>
+                </div>
+                <div class="flex items-center space-x-1">
+                    <button id="formatBtn" class="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition font-medium text-xs flex items-center gap-1" title="JSONを美しくインデント">
+                        <span>整形 (Prettify)</span>
+                    </button>
+                    <button id="minifyBtn" class="px-2.5 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 transition font-medium text-xs" title="改行や空白を除去して圧縮">
+                        軽量化
+                    </button>
+                    <button id="clearBtn" class="px-2 py-1 text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded transition text-xs" title="入力をクリア">
+                        クリア
+                    </button>
+                </div>
+            </div>
+
+            <!-- エディタエリア -->
+            <div class="flex-1 relative flex flex-col overflow-hidden min-h-0">
+                <!-- ファイル読み込みなどのオーバーレイ機能 -->
+                <div id="dropZone" class="absolute inset-0 bg-indigo-50/90 dark:bg-zinc-950/95 border-4 border-dashed border-indigo-400 dark:border-indigo-500 m-3 rounded-xl flex flex-col items-center justify-center p-6 text-center transition-all duration-200 opacity-0 pointer-events-none z-10">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-indigo-500 animate-bounce mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <h3 class="text-lg font-bold text-indigo-700 dark:text-indigo-400">ファイルをドロップして読み込み</h3>
+                    <p class="text-sm text-slate-500 dark:text-zinc-400 mt-1">.json または .txtファイルをサポートしています</p>
+                </div>
+
+                <!-- テキストエリア -->
+                <textarea id="jsonInput" 
+                    placeholder='ここにJSONを入力、ファイルをドラッグ＆ドロップ、または「サンプルJSON」をお試しください...'
+                    class="w-full flex-1 p-4 font-mono text-sm bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-100 outline-none resize-none focus:ring-0 placeholder:text-slate-400 dark:placeholder:text-zinc-600 block h-full overflow-y-auto leading-relaxed"
+                ></textarea>
+
+                <!-- ファイル読み込みコントロール（下部） -->
+                <div class="px-4 py-2 border-t border-slate-100 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-900/30 flex items-center justify-between text-xs shrink-0">
+                    <label class="cursor-pointer text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        ファイルを選択
+                        <input type="file" id="fileInput" accept=".json,.txt" class="hidden">
+                    </label>
+                    <div id="fileInfo" class="text-slate-400 dark:text-zinc-500 italic truncate max-w-[200px]">ファイル未選択</div>
+                </div>
+            </div>
+
+            <!-- バリデーションエラー表示パネル -->
+            <div id="errorPanel" class="hidden shrink-0 border-t border-rose-200 dark:border-rose-950 bg-rose-50 dark:bg-rose-950/30 p-3 text-rose-700 dark:text-rose-300">
+                <div class="flex items-start space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-rose-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                    </svg>
+                    <div class="text-xs">
+                        <div class="font-bold">無効なJSON構文</div>
+                        <p id="errorMessage" class="mt-0.5 font-mono break-all"></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右カラム：出力・ビューワー -->
+        <section class="w-full md:w-1/2 flex flex-col h-1/2 md:h-full bg-slate-50 dark:bg-zinc-950 overflow-hidden">
+            <!-- ビューワーのタブメニュー -->
+            <div class="px-4 py-2 bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div class="flex flex-wrap gap-1" id="viewTabs">
+                    <button data-tab="tree" class="px-3 py-1.5 rounded-md text-xs font-medium bg-indigo-600 text-white transition">ツリー (Tree)</button>
+                    <button data-tab="company" id="companyViewTab" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition hidden flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                        企業比較 (Company View)
+                    </button>
+                    <button data-tab="table" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition">テーブル (Table)</button>
+                    <button data-tab="schema" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition">スキーマ (Schema)</button>
+                    <button data-tab="stats" class="px-3 py-1.5 rounded-md text-xs font-medium text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 transition">統計 (Stats)</button>
+                </div>
+
+                <!-- 検索バー（ツリーとテーブルでのみ有効） -->
+                <div id="searchContainer" class="relative max-w-xs w-full sm:w-48 md:w-56">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
+                        <svg class="h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+                        </svg>
+                    </span>
+                    <input type="text" id="searchInput" placeholder="キーや値を検索..." class="w-full pl-8 pr-7 py-1.5 rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+                    <button id="searchClearBtn" class="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hidden">
+                        <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- アクションサブツールバー（ツリー、テーブルなどの操作） -->
+            <div id="treeSubToolbar" class="px-4 py-2 bg-slate-100 dark:bg-zinc-900/40 border-b border-slate-200/60 dark:border-zinc-800/60 flex justify-between items-center text-xs shrink-0">
+                <div class="flex space-x-2">
+                    <button id="expandAllBtn" class="text-indigo-600 dark:text-indigo-400 hover:underline">すべて展開</button>
+                    <span class="text-slate-300">|</span>
+                    <button id="collapseAllBtn" class="text-indigo-600 dark:text-indigo-400 hover:underline">すべて折りたたむ</button>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button id="copyViewerBtn" class="text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200 flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                        <span>結果をコピー</span>
+                    </button>
+                    <!-- コピー完了通知用 -->
+                    <span id="copyToast" class="hidden text-emerald-600 dark:text-emerald-400 font-medium">コピーしました!</span>
+                </div>
+            </div>
+
+            <!-- ビューワー表示コンテナ -->
+            <div class="flex-1 overflow-auto relative p-4" id="viewContainer">
+                
+                <!-- プレースホルダー（データがない場合） -->
+                <div id="noDataPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-50 dark:bg-zinc-950">
+                    <div class="p-4 bg-slate-100 dark:bg-zinc-900 rounded-full text-slate-400 dark:text-zinc-600 mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-700 dark:text-zinc-300">表示データがありません</h3>
+                    <p class="text-xs text-slate-400 dark:text-zinc-500 mt-1 max-w-xs">左のエディタに有効なJSONデータを入力すると、ここに可視化されます。</p>
+                </div>
+
+                <!-- 1. ツリービュー表示 -->
+                <div id="treeView" class="font-mono text-sm leading-relaxed hidden text-slate-800 dark:text-zinc-100">
+                    <!-- JSで動的にツリーを生成 -->
+                </div>
+
+                <!-- 1.5 企業比較（Company View）表示 -->
+                <div id="companyView" class="hidden space-y-6">
+                    <!-- 企業比較ダッシュボード -->
+                </div>
+
+                <!-- 2. テーブルビュー表示 -->
+                <div id="tableView" class="hidden overflow-x-auto">
+                    <!-- 配列形式のJSONを美しいテーブルで表示 -->
+                </div>
+
+                <!-- 3. スキーマビュー表示 -->
+                <div id="schemaView" class="hidden font-mono text-sm leading-relaxed bg-white dark:bg-zinc-900 rounded-lg p-4 border border-slate-200 dark:border-zinc-800 shadow-sm">
+                    <!-- 自動生成されたJSONスキーマ -->
+                </div>
+
+                <!-- 4. 統計ビュー表示 -->
+                <div id="statsView" class="hidden space-y-4">
+                    <!-- 各種統計、メタデータ情報 -->
+                </div>
+
+            </div>
+
+            <!-- フッター：ホバーしている要素のJSONパス表示用 -->
+            <footer id="pathFooter" class="px-4 py-2 border-t border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs flex justify-between items-center text-slate-500 dark:text-zinc-400 shrink-0">
+                <div class="flex items-center space-x-1.5 truncate mr-4">
+                    <span class="font-semibold text-slate-400 dark:text-zinc-500 shrink-0">現在のパス:</span>
+                    <span id="jsonPathDisplay" class="font-mono select-all bg-slate-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-indigo-600 dark:text-indigo-400 truncate">-</span>
+                </div>
+                <button id="copyPathBtn" class="text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 hidden">パスをコピー</button>
+            </footer>
+        </section>
+
+    </main>
+
+    <!-- YAML / CSV 簡易変換モーダルなどのオーバーレイ -->
+    <div id="toastMessage" class="fixed bottom-4 right-4 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium transform translate-y-12 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-2 z-50">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        <span id="toastText">コピーしました！</span>
+    </div>
+
+    <!-- JavaScriptロジック -->
+    <script>
+        // サンプルJSONデータ (ご提示いただいた最新の企業分析データを適用)
+        const SAMPLE_JSON = {
+            "companies": [
+                {
+                    "name": "任天堂",
+                    "isTarget": true,
+                    "vibe": {
+                        "summary": "独創性重視の慎重な職人集団",
+                        "detail": "娯楽の価値は『他とは違うこと』にあるという哲学が全社に浸透。目先のトレンドに流されず、独自の顧客体験をストイックに追求する静かな熱量と、IPビジネス拡大への強い意志が共存している。",
+                        "quote": "娯楽の価値は『他とは違うこと』にあります。（中略）任天堂は他とは違う娯楽を自らつくり、それをお客様に届けるという強みを持っています。",
+                        "source": "2024年3月期 経営方針説明会（2023年11月）"
+                    },
+                    "challenge": {
+                        "summary": "次世代機移行とIP活用の両立",
+                        "detail": "Nintendo Switchの次世代機（後継機種）への移行において、顧客との関係（ニンテンドーアカウント）を維持しつつ、移行期の業績ボラティリティをいかに抑え、世界中のファンへ安定供給するかが最大の壁。",
+                        "quote": "過去において、ハードウェアの移行期というのは非常に大きな課題であったと考えています。（中略）いかにして次世代へスムーズに移行できるかという点が重要です。",
+                        "source": "第84期 定時株主総会 質疑応答（2024年6月）"
+                    },
+                    "fact": {
+                        "summary": "映像・テーマパークへの積極投資",
+                        "detail": "『スーパーマリオブラザーズ・ムービー』の世界的ヒット（興行収入13.6億ドル超）を受け、2026年公開予定の『ゼルダの伝説』実写映画化や新アニメ映画の開発など、ハード外のIP展開へ経営資源を集中投下中。",
+                        "source": "2024年3月期 決算説明会（2024年5月）"
+                    }
+                },
+                {
+                    "name": "ソニーグループ（ソニー・インタラクティブエンタテインメント）",
+                    "isTarget": false,
+                    "vibe": {
+                        "summary": "技術駆動のグローバル・メガプラットフォーム",
+                        "detail": "圧倒的なマシンスペックとクリエイター支援を軸に、ハイエンドなゲーム体験を追求。エンタメ、テクノロジー、金融を融合した巨大コングロマリットとして、グローバル市場での覇権を狙うアグレッシブなトーン。",
+                        "quote": "コンシューマーゲーム市場の拡大と、PCやモバイルなどへの展開によって、より多くのお客様に素晴らしいゲーム体験を届けることに注力します。",
+                        "source": "2024年度 経営方針説明会（2024年5月）"
+                    },
+                    "challenge": {
+                        "summary": "開発費高騰と収益性の最適化",
+                        "detail": "AAA（超大作）タイトルの開発長期化・コスト高騰が顕著。PlayStation 5のハード普及が進む一方で、ソフトウェアの収益性向上と、ライブサービスゲーム（運営型）へのポートフォリオ移行の舵取りに苦慮。",
+                        "quote": "利益率の向上は喫緊の課題であり、ファーストパーティタイトルのPC展開を含めたマルチプラットフォーム戦略の強化が必要だと認識しています。",
+                        "source": "2024年3月期 第3四半期 決算説明会（2024年2月）"
+                    },
+                    "fact": {
+                        "summary": "ライブサービス・PC展開の加速",
+                        "detail": "Bungieの買収（約36億ドル）を軸にライブサービスゲームの開発ノウハウを取り込み、同時に『Helldivers 2』をはじめとする自社タイトルのPC版同時発売を進め、PSハードの枠を超えた顧客基盤拡大を推進。",
+                        "source": "2024年度 経営方針説明会（2024年5月）"
+                    }
+                },
+                {
+                    "name": "マイクロソフト（Xboxゲーム部門）",
+                    "isTarget": false,
+                    "vibe": {
+                        "summary": "サブスクとAIで挑む市場破壊者",
+                        "detail": "ハードウェアの販売台数競争から脱却し、クラウドと「Xbox Game Pass」というサブスクリプションによる『いつでも、どこでも遊べる環境』の構築を目指す、シリコンバレー流の破壊的・スピード重視のカルチャー。",
+                        "quote": "私たちのビジョンは、プレイヤーが望むあらゆるデバイスで、世界中の30億人のゲーマーに素晴らしいゲームを届けることです。",
+                        "source": "Activision Blizzard買収完了に関するCEO声明（2023年10月）"
+                    },
+                    "challenge": {
+                        "summary": "巨額買収のシナジー創出と文化統合",
+                        "detail": "Activision Blizzardの巨額買収（約687億ドル）を完了したものの、大規模な人員削減やスタジオ閉鎖が発生。莫大な投資に対する短期的なリターン（Game Pass会員数の伸び悩み）と、組織の融和が課題。",
+                        "quote": "ビジネスを成長軌道に乗せるためには、持続可能なコスト構造の構築と、買収した組織の統合を最優先で進める必要があります。",
+                        "source": "社内向け方針説明および組織変更通知（2024年1月）"
+                    },
+                    "fact": {
+                        "summary": "Activision買収完了とマルチ展開",
+                        "detail": "歴史上最大規模の買収により『Call of Duty』や『Candy Crush』などの超強力IPを獲得。買収後は排他的に囲い込まず、Nintendo SwitchやPlayStationなど競合ハードへのマルチプラットフォーム供給を継続中。",
+                        "source": "2024年6月期 第3四半期 決算発表（2024年4月）"
+                    }
+                }
+            ]
+        };
+
+        // アプリケーションの状態管理
+        let state = {
+            rawText: '',
+            parsedJson: null,
+            isValid: false,
+            currentTab: 'tree', // tree, company, table, schema, stats
+            hoveredPath: '',
+            searchQuery: '',
+            expandedNodes: new Set() // 展開されているノードのパスを記憶
+        };
+
+        // DOMの要素取得
+        const jsonInput = document.getElementById('jsonInput');
+        const charCount = document.getElementById('charCount');
+        const errorPanel = document.getElementById('errorPanel');
+        const errorMessage = document.getElementById('errorMessage');
+        const noDataPlaceholder = document.getElementById('noDataPlaceholder');
+        const viewContainer = document.getElementById('viewContainer');
+        const treeView = document.getElementById('treeView');
+        const companyView = document.getElementById('companyView');
+        const companyViewTab = document.getElementById('companyViewTab');
+        const tableView = document.getElementById('tableView');
+        const schemaView = document.getElementById('schemaView');
+        const statsView = document.getElementById('statsView');
+        const jsonPathDisplay = document.getElementById('jsonPathDisplay');
+        const copyPathBtn = document.getElementById('copyPathBtn');
+        const searchInput = document.getElementById('searchInput');
+        const searchClearBtn = document.getElementById('searchClearBtn');
+        const searchContainer = document.getElementById('searchContainer');
+        const treeSubToolbar = document.getElementById('treeSubToolbar');
+
+        // タブボタン
+        const tabButtons = document.querySelectorAll('#viewTabs button');
+
+        // テーマ切り替え
+        const themeToggle = document.getElementById('themeToggle');
+        const sunIcon = document.getElementById('sunIcon');
+        const moonIcon = document.getElementById('moonIcon');
+
+        // 初期ロード時：テーマの設定
+        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            sunIcon.classList.remove('hidden');
+            moonIcon.classList.add('hidden');
+        } else {
+            document.documentElement.classList.remove('dark');
+            sunIcon.classList.add('hidden');
+            moonIcon.classList.remove('hidden');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
+            }
+        });
+
+        // カスタムトースト表示
+        function showToast(text) {
+            const toast = document.getElementById('toastMessage');
+            const toastText = document.getElementById('toastText');
+            toastText.textContent = text;
+            toast.classList.remove('translate-y-12', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-12', 'opacity-0');
+            }, 2500);
+        }
+
+        // コピーユーティリティ (iframe制限を考慮してdocument.execCommandを使用)
+        function copyToClipboard(text) {
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = text;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            try {
+                document.execCommand('copy');
+                showToast('クリップボードにコピーしました！');
+            } catch (err) {
+                console.error('コピー失敗:', err);
+                showToast('コピーできませんでした。');
+            }
+            document.body.removeChild(tempTextArea);
+        }
+
+        // 入力値変更時のイベント
+        jsonInput.addEventListener('input', () => {
+            const val = jsonInput.value;
+            state.rawText = val;
+            charCount.textContent = `(${val.length}文字)`;
+            validateAndParse(val);
+        });
+
+        // リアルタイムJSONパース & エラー表示
+        function validateAndParse(text) {
+            if (!text.trim()) {
+                state.isValid = false;
+                state.parsedJson = null;
+                errorPanel.classList.add('hidden');
+                showPlaceholder();
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(text);
+                state.parsedJson = parsed;
+                state.isValid = true;
+                errorPanel.classList.add('hidden');
+                noDataPlaceholder.classList.add('hidden');
+                
+                // 初回の読み込み時はデフォルトですべてを展開状態にする
+                if (state.expandedNodes.size === 0) {
+                    initExpandedNodes(parsed, '$');
+                }
+
+                // 「企業比較(Company)」タブを表示するか判定 (直下にcompanies配列がある場合)
+                if (parsed && Array.isArray(parsed.companies)) {
+                    companyViewTab.classList.remove('hidden');
+                    // 最初に読み込まれたのがサンプルなどの企業形式なら自動でCompanyタブにする
+                    if (state.currentTab === 'tree' && text.includes('"companies"')) {
+                        switchTab('company');
+                    }
+                } else {
+                    companyViewTab.classList.add('hidden');
+                    if (state.currentTab === 'company') {
+                        switchTab('tree');
+                    }
+                }
+
+                renderActiveTab();
+            } catch (err) {
+                state.isValid = false;
+                errorPanel.classList.remove('hidden');
+                errorMessage.textContent = err.message;
+                
+                const positionMatch = err.message.match(/position (\d+)/);
+                if (positionMatch) {
+                    const pos = parseInt(positionMatch[1]);
+                    const beforeErr = text.substring(0, pos);
+                    const lineNum = beforeErr.split('\n').length;
+                    const colNum = pos - beforeErr.lastIndexOf('\n');
+                    errorMessage.textContent = `${err.message} (行: ${lineNum}, 列: ${colNum})`;
+                }
+                
+                if (!state.parsedJson) {
+                    showPlaceholder();
+                }
+            }
+        }
+
+        // 手動タブ切り替えメソッド
+        function switchTab(tabName) {
+            tabButtons.forEach(btn => {
+                if (btn.dataset.tab === tabName) {
+                    btn.classList.add('bg-indigo-600', 'text-white');
+                    btn.classList.remove('text-slate-600', 'dark:text-zinc-400', 'hover:bg-slate-100', 'dark:hover:bg-zinc-800');
+                } else {
+                    btn.classList.remove('bg-indigo-600', 'text-white');
+                    btn.classList.add('text-slate-600', 'dark:text-zinc-400', 'hover:bg-slate-100', 'dark:hover:bg-zinc-800');
+                }
+            });
+            state.currentTab = tabName;
+            renderActiveTab();
+        }
+
+        // 初期状態でどのオブジェクトを展開するか再帰的に指定
+        function initExpandedNodes(obj, currentPath) {
+            if (typeof obj === 'object' && obj !== null) {
+                state.expandedNodes.add(currentPath);
+                const keys = Object.keys(obj);
+                if (keys.length < 50) { 
+                    keys.forEach(key => {
+                        const path = currentPath === '$' ? `$.${key}` : `${currentPath}.${key}`;
+                        initExpandedNodes(obj[key], path);
+                    });
+                }
+            }
+        }
+
+        // プレースホルダーの表示
+        function showPlaceholder() {
+            noDataPlaceholder.classList.remove('hidden');
+            treeView.classList.add('hidden');
+            companyView.classList.add('hidden');
+            companyViewTab.classList.add('hidden');
+            tableView.classList.add('hidden');
+            schemaView.classList.add('hidden');
+            statsView.classList.add('hidden');
+            treeSubToolbar.classList.add('hidden');
+            jsonPathDisplay.textContent = '-';
+            copyPathBtn.classList.add('hidden');
+        }
+
+        // サンプルJSONの挿入
+        document.getElementById('dummyDataBtn').addEventListener('click', () => {
+            const str = JSON.stringify(SAMPLE_JSON, null, 2);
+            jsonInput.value = str;
+            state.rawText = str;
+            charCount.textContent = `(${str.length}文字)`;
+            state.expandedNodes.clear();
+            validateAndParse(str);
+            switchTab('company');
+            showToast('サンプルJSON（企業比較データ）を読み込みました！');
+        });
+
+        // 整形ボタン
+        document.getElementById('formatBtn').addEventListener('click', () => {
+            if (!state.isValid || !state.parsedJson) {
+                showToast('有効なJSONではありません');
+                return;
+            }
+            const formatted = JSON.stringify(state.parsedJson, null, 4);
+            jsonInput.value = formatted;
+            state.rawText = formatted;
+            charCount.textContent = `(${formatted.length}文字)`;
+            validateAndParse(formatted);
+        });
+
+        // 軽量化ボタン
+        document.getElementById('minifyBtn').addEventListener('click', () => {
+            if (!state.isValid || !state.parsedJson) {
+                showToast('有効なJSONではありません');
+                return;
+            }
+            const minified = JSON.stringify(state.parsedJson);
+            jsonInput.value = minified;
+            state.rawText = minified;
+            charCount.textContent = `(${minified.length}文字)`;
+            validateAndParse(minified);
+        });
+
+        // クリアボタン
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            jsonInput.value = '';
+            state.rawText = '';
+            charCount.textContent = '(0文字)';
+            validateAndParse('');
+            state.expandedNodes.clear();
+        });
+
+        // ドラッグ＆ドロップ関連
+        const dropZone = document.getElementById('dropZone');
+        
+        window.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('opacity-0', 'pointer-events-none');
+        });
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            if (e.relatedTarget === null || !dropZone.contains(e.relatedTarget)) {
+                dropZone.classList.add('opacity-0', 'pointer-events-none');
+            }
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('opacity-0', 'pointer-events-none');
+            
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // ファイル入力ボタン
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            fileInfo.textContent = `${file.name} (${formatBytes(file.size)})`;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                jsonInput.value = text;
+                state.rawText = text;
+                charCount.textContent = `(${text.length}文字)`;
+                state.expandedNodes.clear();
+                validateAndParse(text);
+                showToast(`ファイル「${file.name}」を読み込みました`);
+            };
+            reader.readAsText(file);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // タブの切り替え処理
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                switchTab(btn.dataset.tab);
+            });
+        });
+
+        function renderActiveTab() {
+            if (!state.parsedJson) {
+                showPlaceholder();
+                return;
+            }
+
+            // 一旦すべて非表示
+            treeView.classList.add('hidden');
+            companyView.classList.add('hidden');
+            tableView.classList.add('hidden');
+            schemaView.classList.add('hidden');
+            statsView.classList.add('hidden');
+            treeSubToolbar.classList.add('hidden');
+            searchContainer.classList.add('opacity-0', 'pointer-events-none');
+
+            switch(state.currentTab) {
+                case 'tree':
+                    treeView.classList.remove('hidden');
+                    treeSubToolbar.classList.remove('hidden');
+                    searchContainer.classList.remove('opacity-0', 'pointer-events-none');
+                    renderTreeView();
+                    break;
+                case 'company':
+                    companyView.classList.remove('hidden');
+                    renderCompanyView();
+                    break;
+                case 'table':
+                    tableView.classList.remove('hidden');
+                    searchContainer.classList.remove('opacity-0', 'pointer-events-none');
+                    renderTableView();
+                    break;
+                case 'schema':
+                    schemaView.classList.remove('hidden');
+                    renderSchemaView();
+                    break;
+                case 'stats':
+                    statsView.classList.remove('hidden');
+                    renderStatsView();
+                    break;
+            }
+        }
+
+        /* ==========================================================================
+           1. ツリービューのレンダリング (高性能・フル機能)
+           ========================================================================== */
+        function renderTreeView() {
+            treeView.innerHTML = '';
+            const rootContainer = document.createElement('div');
+            rootContainer.className = 'tree-node-root select-none';
+            
+            const rootNode = buildTreeDOM(state.parsedJson, '$', 'Root');
+            rootContainer.appendChild(rootNode);
+            treeView.appendChild(rootContainer);
+        }
+
+        function buildTreeDOM(val, path, keyName) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'tree-item py-0.5 relative group transition-colors duration-150 rounded px-1 hover:bg-slate-200/50 dark:hover:bg-zinc-800/50';
+            wrapper.dataset.path = path;
+
+            wrapper.addEventListener('mouseenter', (e) => {
+                e.stopPropagation();
+                updatePathDisplay(path);
+            });
+
+            const type = getDataType(val);
+            const isCollapsible = (type === 'object' || type === 'array');
+
+            const itemLine = document.createElement('div');
+            itemLine.className = 'flex items-start flex-wrap';
+
+            if (isCollapsible) {
+                const toggleBtn = document.createElement('button');
+                toggleBtn.className = 'w-4 h-4 mr-1 mt-1 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 focus:outline-none transition-transform shrink-0 flex items-center justify-center';
+                
+                const isExpanded = state.expandedNodes.has(path);
+                toggleBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transform transition-transform ${isExpanded ? 'rotate-90' : ''}" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                    </svg>
+                `;
+
+                toggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleNode(path, childContainer, toggleBtn.querySelector('svg'));
+                });
+                itemLine.appendChild(toggleBtn);
+            } else {
+                const spacer = document.createElement('div');
+                spacer.className = 'w-4 h-4 mr-1 shrink-0';
+                itemLine.appendChild(spacer);
+            }
+
+            if (keyName !== undefined && keyName !== 'Root') {
+                const keySpan = document.createElement('span');
+                keySpan.className = 'font-bold text-indigo-600 dark:text-indigo-400 mr-1 select-text';
+                
+                if (state.searchQuery && keyName.toLowerCase().includes(state.searchQuery.toLowerCase())) {
+                    keySpan.innerHTML = highlightMatch(keyName, state.searchQuery);
+                } else {
+                    keySpan.textContent = `"${keyName}"`;
+                }
+                
+                itemLine.appendChild(keySpan);
+
+                const colon = document.createElement('span');
+                colon.className = 'text-slate-400 dark:text-zinc-600 mr-2';
+                colon.textContent = ':';
+                itemLine.appendChild(colon);
+            }
+
+            let childContainer = null;
+
+            if (isCollapsible) {
+                const isArray = (type === 'array');
+                const len = isArray ? val.length : Object.keys(val).length;
+                const bracketOpen = isArray ? '[' : '{';
+                const bracketClose = isArray ? ']' : '}';
+
+                const bracketSpan = document.createElement('span');
+                bracketSpan.className = 'text-slate-500 font-semibold';
+                bracketSpan.textContent = `${bracketOpen}`;
+                itemLine.appendChild(bracketSpan);
+
+                const badge = document.createElement('span');
+                badge.className = 'text-xs text-slate-400 dark:text-zinc-500 font-sans mx-2 bg-slate-200/50 dark:bg-zinc-800 px-1.5 py-0.5 rounded';
+                badge.textContent = `${len} ${isArray ? 'items' : 'keys'}`;
+                itemLine.appendChild(badge);
+
+                const nodeActions = document.createElement('div');
+                nodeActions.className = 'hidden group-hover:inline-flex items-center space-x-1.5 ml-2 text-xs bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded shadow px-1 py-0.5';
+                nodeActions.innerHTML = `
+                    <button class="text-indigo-500 hover:underline px-1 py-0.5" title="このノード全体をJSONとしてコピー">コピー</button>
+                `;
+                nodeActions.querySelector('button').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    copyToClipboard(JSON.stringify(val, null, 2));
+                });
+                itemLine.appendChild(nodeActions);
+
+                childContainer = document.createElement('div');
+                childContainer.className = 'pl-4 ml-2 tree-line mt-0.5';
+                
+                const isExpanded = state.expandedNodes.has(path);
+                if (!isExpanded) {
+                    childContainer.classList.add('hidden');
+                    const closeSpan = document.createElement('span');
+                    closeSpan.className = 'text-slate-500 font-semibold ml-1';
+                    closeSpan.textContent = bracketClose;
+                    itemLine.appendChild(closeSpan);
+                } else {
+                    buildChildNodes(val, path, childContainer);
+                    
+                    const footerLine = document.createElement('div');
+                    footerLine.className = 'pl-5 text-slate-500 font-semibold py-0.5 select-none';
+                    footerLine.textContent = bracketClose;
+                    childContainer.appendChild(footerLine);
+                }
+
+                wrapper.appendChild(itemLine);
+                wrapper.appendChild(childContainer);
+
+            } else {
+                const valSpan = document.createElement('span');
+                valSpan.className = 'select-text select-all break-all';
+                
+                let formattedVal = JSON.stringify(val);
+                
+                if (type === 'string') {
+                    valSpan.className += ' text-green-600 dark:text-green-400';
+                } else if (type === 'number') {
+                    valSpan.className += ' text-amber-600 dark:text-amber-400';
+                } else if (type === 'boolean') {
+                    valSpan.className += ' text-purple-600 dark:text-purple-400';
+                } else if (type === 'null') {
+                    valSpan.className += ' text-slate-400 dark:text-zinc-500 font-semibold';
+                    formattedVal = 'null';
+                }
+
+                if (state.searchQuery && String(val).toLowerCase().includes(state.searchQuery.toLowerCase())) {
+                    valSpan.innerHTML = highlightMatch(formattedVal, state.searchQuery);
+                } else {
+                    valSpan.textContent = formattedVal;
+                }
+
+                itemLine.appendChild(valSpan);
+
+                const inlineCopy = document.createElement('button');
+                inlineCopy.className = 'hidden group-hover:inline-flex items-center ml-2 text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300';
+                inlineCopy.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M8 2a1 1 0 000 2h2a1 1 0 100-2H8z" />
+                        <path d="M3 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" />
+                    </svg>
+                `;
+                inlineCopy.title = "値をコピー";
+                inlineCopy.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    copyToClipboard(typeof val === 'string' ? val : JSON.stringify(val));
+                });
+                itemLine.appendChild(inlineCopy);
+
+                wrapper.appendChild(itemLine);
+            }
+
+            return wrapper;
+        }
+
+        function buildChildNodes(val, path, container) {
+            const keys = Object.keys(val);
+            keys.forEach((key, index) => {
+                const subPath = Array.isArray(val) ? `${path}[${key}]` : `${path}.${key}`;
+                const childNode = buildTreeDOM(val[key], subPath, key);
+                
+                if (index < keys.length - 1) {
+                    const comma = document.createElement('span');
+                    comma.className = 'text-slate-400 dark:text-zinc-600 self-end mb-0.5 select-none';
+                    comma.textContent = ',';
+                    const targetLine = childNode.querySelector('.flex');
+                    if (targetLine) targetLine.appendChild(comma);
+                }
+                
+                container.appendChild(childNode);
+            });
+        }
+
+        function toggleNode(path, container, svgIcon) {
+            if (state.expandedNodes.has(path)) {
+                state.expandedNodes.delete(path);
+                container.classList.add('hidden');
+                svgIcon.classList.remove('rotate-90');
+                renderTreeView();
+            } else {
+                state.expandedNodes.add(path);
+                container.classList.remove('hidden');
+                svgIcon.classList.add('rotate-90');
+                renderTreeView();
+            }
+        }
+
+        function getDataType(val) {
+            if (val === null) return 'null';
+            if (Array.isArray(val)) return 'array';
+            return typeof val;
+        }
+
+        function highlightMatch(text, query) {
+            if (!query) return text;
+            const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const regex = new RegExp(`(${escapedQuery})`, 'gi');
+            return text.replace(regex, `<mark class="bg-amber-200 dark:bg-amber-800 text-slate-900 dark:text-zinc-100 px-0.5 rounded">$1</mark>`);
+        }
+
+        function updatePathDisplay(path) {
+            state.hoveredPath = path;
+            jsonPathDisplay.textContent = path;
+            copyPathBtn.classList.remove('hidden');
+        }
+
+        copyPathBtn.addEventListener('click', () => {
+            if (state.hoveredPath) {
+                copyToClipboard(state.hoveredPath);
+            }
+        });
+
+        document.getElementById('expandAllBtn').addEventListener('click', () => {
+            if (!state.parsedJson) return;
+            expandRecursive(state.parsedJson, '$');
+            renderTreeView();
+            showToast('すべてのノードを展開しました');
+        });
+
+        function expandRecursive(obj, currentPath) {
+            if (typeof obj === 'object' && obj !== null) {
+                state.expandedNodes.add(currentPath);
+                Object.keys(obj).forEach(key => {
+                    const subPath = Array.isArray(obj) ? `${currentPath}[${key}]` : `${currentPath}.${key}`;
+                    expandRecursive(obj[key], subPath);
+                });
+            }
+        }
+
+        document.getElementById('collapseAllBtn').addEventListener('click', () => {
+            state.expandedNodes.clear();
+            state.expandedNodes.add('$');
+            renderTreeView();
+            showToast('すべてのノードを折りたたみました');
+        });
+
+
+        /* ==========================================================================
+           1.5 企業比較ビュー（Company View）の実装
+           ========================================================================== */
+        function renderCompanyView() {
+            companyView.innerHTML = '';
+            
+            if (!state.parsedJson || !Array.isArray(state.parsedJson.companies)) {
+                return;
+            }
+
+            const companies = state.parsedJson.companies;
+
+            // ダッシュボードの上部インフォ
+            const headerInfo = document.createElement('div');
+            headerInfo.className = 'bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-6 text-white shadow-lg shadow-indigo-500/10 mb-6';
+            headerInfo.innerHTML = `
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="px-2 py-0.5 bg-white/20 text-xs font-semibold rounded-full">比較ダッシュボード</span>
+                </div>
+                <h2 class="text-xl font-extrabold tracking-tight">業界・競合企業 分析データ一覧</h2>
+                <p class="text-xs text-indigo-100 mt-1">JSONデータから各社の「雰囲気」「課題」「注力実績」をスマートに抽出し、インフォグラフィック風に表示しています。</p>
+            `;
+            companyView.appendChild(headerInfo);
+
+            // 企業カードのコンテナ
+            const grid = document.createElement('div');
+            grid.className = 'grid grid-cols-1 xl:grid-cols-3 gap-6';
+
+            companies.forEach((company) => {
+                const card = document.createElement('div');
+                
+                // 分析ターゲット対象かどうかのスタイル分け
+                const borderStyle = company.isTarget 
+                    ? 'border-2 border-indigo-500 dark:border-indigo-400 ring-4 ring-indigo-500/10' 
+                    : 'border border-slate-200 dark:border-zinc-800';
+
+                card.className = `bg-white dark:bg-zinc-900 rounded-2xl ${borderStyle} shadow-sm overflow-hidden flex flex-col justify-between transition-all hover:shadow-md`;
+
+                // ターゲットバッジなどの用意
+                const targetBadge = company.isTarget 
+                    ? `<span class="px-2.5 py-1 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold uppercase rounded-full tracking-wider flex items-center gap-1">
+                         <span class="w-1.5 h-1.5 bg-indigo-600 dark:bg-indigo-400 rounded-full"></span>分析対象
+                       </span>`
+                    : `<span class="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 text-[10px] font-medium rounded-full">競合・他社</span>`;
+
+                card.innerHTML = `
+                    <!-- カードヘッダー -->
+                    <div class="p-5 border-b border-slate-100 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-900/30 flex items-center justify-between gap-2">
+                        <h3 class="text-base font-bold text-slate-900 dark:text-white tracking-tight break-words flex-1">${company.name}</h3>
+                        <div class="shrink-0 flex items-center">${targetBadge}</div>
+                    </div>
+
+                    <!-- カードコンテンツ -->
+                    <div class="p-5 space-y-6 flex-1 text-sm">
+                        <!-- 1. Vibe (社風・雰囲気) -->
+                        ${company.vibe ? renderSection('vibe', '社風・ビジョン', company.vibe, 'indigo') : ''}
+                        
+                        <!-- 2. Challenge (課題) -->
+                        ${company.challenge ? renderSection('challenge', '直面の課題', company.challenge, 'rose') : ''}
+
+                        <!-- 3. Fact (事実・直近の実績) -->
+                        ${company.fact ? renderSection('fact', '注力実績・事実', company.fact, 'emerald') : ''}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+
+            companyView.appendChild(grid);
+        }
+
+        // 企業分析の特定セクション (Vibe, Challenge, Fact) をHTML描画
+        function renderSection(type, label, data, color) {
+            let colorClasses = {
+                indigo: { bg: 'bg-indigo-50 dark:bg-indigo-950/20', text: 'text-indigo-800 dark:text-indigo-300', dot: 'bg-indigo-500', border: 'border-indigo-100 dark:border-indigo-950/50' },
+                rose: { bg: 'bg-rose-50 dark:bg-rose-950/20', text: 'text-rose-800 dark:text-rose-300', dot: 'bg-rose-500', border: 'border-rose-100 dark:border-rose-950/50' },
+                emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-800 dark:text-emerald-300', dot: 'bg-emerald-500', border: 'border-emerald-100 dark:border-emerald-950/50' }
+            }[color] || { bg: 'bg-slate-50', text: 'text-slate-800', dot: 'bg-slate-500', border: 'border-slate-100' };
+
+            // 引用 (Quote) ブロック
+            const quoteHtml = data.quote 
+                ? `<div class="mt-2.5 p-3 italic bg-slate-50 dark:bg-zinc-800/50 rounded-lg text-xs border-l-2 border-slate-300 dark:border-zinc-700 relative text-slate-600 dark:text-zinc-400">
+                     <span class="absolute -top-1 left-1.5 text-2xl text-slate-300 dark:text-zinc-700 font-serif pointer-events-none">“</span>
+                     <p class="pl-3.5 pr-2 relative z-10 font-sans leading-relaxed">「${data.quote}」</p>
+                   </div>`
+                : '';
+
+            // 出典 (Source)
+            const sourceHtml = data.source 
+                ? `<div class="mt-2 text-[10px] text-right font-medium text-slate-400 dark:text-zinc-500 flex items-center justify-end gap-1">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                     </svg>
+                     <span>${data.source}</span>
+                   </div>`
+                : '';
+
+            return `
+                <div class="border ${colorClasses.border} rounded-xl p-4 bg-slate-50/20 dark:bg-zinc-900/20 transition-all">
+                    <!-- セクションタイトルバッジ -->
+                    <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-bold ${colorClasses.bg} ${colorClasses.text} mb-2.5">
+                        <span class="w-1.5 h-1.5 rounded-full ${colorClasses.dot}"></span>
+                        <span>${label}</span>
+                    </div>
+                    
+                    <!-- サマリー・詳細 -->
+                    <div class="font-bold text-slate-900 dark:text-white leading-tight mb-1">${data.summary}</div>
+                    <p class="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed font-sans mt-1.5">${data.detail}</p>
+                    
+                    <!-- 引用 & 出典 -->
+                    ${quoteHtml}
+                    ${sourceHtml}
+                </div>
+            `;
+        }
+
+
+        /* ==========================================================================
+           2. テーブルビューのレンダリング
+           ========================================================================== */
+        function renderTableView() {
+            tableView.innerHTML = '';
+            
+            let dataArray = null;
+            let title = '';
+
+            if (Array.isArray(state.parsedJson)) {
+                dataArray = state.parsedJson;
+                title = 'ルート配列';
+            } else if (state.parsedJson && Array.isArray(state.parsedJson.companies)) {
+                dataArray = state.parsedJson.companies;
+                title = '企業リスト配列 ("companies")';
+            } else {
+                let maxLen = -1;
+                let candidateKey = '';
+                
+                Object.keys(state.parsedJson).forEach(key => {
+                    if (Array.isArray(state.parsedJson[key]) && state.parsedJson[key].length > maxLen) {
+                        maxLen = state.parsedJson[key].length;
+                        candidateKey = key;
+                    }
+                });
+
+                if (maxLen > 0) {
+                    dataArray = state.parsedJson[candidateKey];
+                    title = `内包オブジェクト: "${candidateKey}" (長さ: ${maxLen})`;
+                }
+            }
+
+            if (!dataArray || dataArray.length === 0) {
+                tableView.innerHTML = `
+                    <div class="text-center p-8 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg">
+                        <p class="text-slate-500 dark:text-zinc-400">テーブル表示できる配列データが検出されませんでした。</p>
+                        <p class="text-xs text-slate-400 dark:text-zinc-500 mt-1">この機能は、オブジェクトの配列、またはルートが配列のデータに適しています。</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const allKeys = new Set();
+            dataArray.forEach(item => {
+                if (item && typeof item === 'object' && !Array.isArray(item)) {
+                    Object.keys(item).forEach(k => allKeys.add(k));
+                }
+            });
+
+            const isPrimitiveArray = allKeys.size === 0;
+
+            const tableWrapper = document.createElement('div');
+            tableWrapper.className = 'min-w-full inline-block align-middle border border-slate-200 dark:border-zinc-800 rounded-lg overflow-hidden bg-white dark:bg-zinc-900 shadow-sm';
+
+            const infoBar = document.createElement('div');
+            infoBar.className = 'px-4 py-2 border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/60 flex justify-between items-center text-xs font-semibold';
+            infoBar.innerHTML = `
+                <span class="text-slate-600 dark:text-zinc-400">テーブル表示モード: ${title}</span>
+                <span class="text-slate-400 dark:text-zinc-500">${dataArray.length}件の行</span>
+            `;
+            tableWrapper.appendChild(infoBar);
+
+            const table = document.createElement('table');
+            table.className = 'min-w-full divide-y divide-slate-200 dark:divide-zinc-800 text-left text-xs';
+
+            const thead = document.createElement('thead');
+            thead.className = 'bg-slate-100 dark:bg-zinc-800 font-bold text-slate-700 dark:text-zinc-300';
+            const trHead = document.createElement('tr');
+            
+            const thIndex = document.createElement('th');
+            thIndex.className = 'px-4 py-3 w-16 text-center border-r border-slate-200 dark:border-zinc-700';
+            thIndex.textContent = '#';
+            trHead.appendChild(thIndex);
+
+            if (isPrimitiveArray) {
+                const thVal = document.createElement('th');
+                thVal.className = 'px-4 py-3';
+                thVal.textContent = '値 (Value)';
+                trHead.appendChild(thVal);
+            } else {
+                allKeys.forEach(key => {
+                    const thKey = document.createElement('th');
+                    thKey.className = 'px-4 py-3 font-semibold tracking-wider hover:bg-slate-200/50 dark:hover:bg-zinc-700/50 cursor-pointer transition';
+                    thKey.textContent = key;
+                    trHead.appendChild(thKey);
+                });
+            }
+            thead.appendChild(trHead);
+            table.appendChild(thead);
+
+            const tbody = document.createElement('tbody');
+            tbody.className = 'divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900 font-mono';
+
+            dataArray.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors';
+
+                const tdIndex = document.createElement('td');
+                tdIndex.className = 'px-4 py-2.5 text-center bg-slate-50 dark:bg-zinc-900 text-slate-400 border-r border-slate-200 dark:border-zinc-800 font-sans';
+                tdIndex.textContent = index;
+                tr.appendChild(tdIndex);
+
+                if (isPrimitiveArray) {
+                    const tdVal = document.createElement('td');
+                    tdVal.className = 'px-4 py-2.5 break-all text-slate-700 dark:text-zinc-300';
+                    tdVal.textContent = JSON.stringify(item);
+                    tr.appendChild(tdVal);
+                } else {
+                    allKeys.forEach(key => {
+                        const td = document.createElement('td');
+                        td.className = 'px-4 py-2.5 break-all';
+                        
+                        const val = item ? item[key] : undefined;
+                        if (val === undefined) {
+                            td.className += ' text-slate-300 dark:text-zinc-700 italic';
+                            td.textContent = 'undefined';
+                        } else {
+                            const type = getDataType(val);
+                            if (type === 'string') {
+                                td.className += ' text-green-600 dark:text-green-400';
+                                td.textContent = val;
+                            } else if (type === 'number') {
+                                td.className += ' text-amber-600 dark:text-amber-400';
+                                td.textContent = val;
+                            } else if (type === 'boolean') {
+                                td.className += ' text-purple-600 dark:text-purple-400';
+                                td.textContent = val ? 'true' : 'false';
+                            } else if (type === 'null') {
+                                td.className += ' text-slate-400 dark:text-zinc-600';
+                                td.textContent = 'null';
+                            } else {
+                                td.className += ' text-indigo-500 dark:text-indigo-400 truncate max-w-xs cursor-help';
+                                td.textContent = JSON.stringify(val);
+                                td.title = JSON.stringify(val, null, 2);
+                            }
+                        }
+                        tr.appendChild(td);
+                    });
+                }
+                tbody.appendChild(tr);
+            });
+
+            table.appendChild(tbody);
+            tableWrapper.appendChild(table);
+            tableView.appendChild(tableWrapper);
+        }
+
+
+        /* ==========================================================================
+           3. スキーマビューの自動生成
+           ========================================================================== */
+        function renderSchemaView() {
+            schemaView.innerHTML = '';
+            
+            const schema = generateSchema(state.parsedJson);
+            const pre = document.createElement('pre');
+            pre.className = 'text-xs text-slate-800 dark:text-zinc-200 overflow-x-auto';
+            
+            pre.innerHTML = colorizeSchema(JSON.stringify(schema, null, 2));
+            schemaView.appendChild(pre);
+        }
+
+        function generateSchema(val) {
+            const type = getDataType(val);
+            if (type === 'null') return { type: "null" };
+            if (type === 'array') {
+                if (val.length === 0) return { type: "array", items: {} };
+                const subSchemas = val.map(item => generateSchema(item));
+                const uniqueTypes = [...new Set(subSchemas.map(s => s.type))];
+                if (uniqueTypes.length === 1) {
+                    return { type: "array", items: subSchemas[0] };
+                } else {
+                    return { type: "array", items: { anyOf: subSchemas } };
+                }
+            }
+            if (type === 'object') {
+                const properties = {};
+                Object.keys(val).forEach(key => {
+                    properties[key] = generateSchema(val[key]);
+                });
+                return { type: "object", properties };
+            }
+            return { type: type };
+        }
+
+        function colorizeSchema(schemaStr) {
+            return schemaStr
+                .replace(/"type":\s*"([^"]+)"/g, '"type": "<span class="text-indigo-500 font-bold">$1</span>"')
+                .replace(/"(properties|items|anyOf)":/g, '"<span class="text-teal-600 dark:text-teal-400 font-semibold">$1</span>":');
+        }
+
+
+        /* ==========================================================================
+           4. 統計ビューの表示
+           ========================================================================== */
+        function renderStatsView() {
+            statsView.innerHTML = '';
+
+            const stats = calculateStats(state.parsedJson);
+            
+            const container = document.createElement('div');
+            container.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
+
+            const addCard = (title, val, desc) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white dark:bg-zinc-900 p-4 rounded-lg border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between';
+                card.innerHTML = `
+                    <div>
+                        <div class="text-xs font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider">${title}</div>
+                        <div class="text-2xl font-bold text-slate-800 dark:text-white mt-1 font-mono">${val}</div>
+                    </div>
+                    <div class="text-xs text-slate-500 dark:text-zinc-400 mt-2">${desc}</div>
+                `;
+                container.appendChild(card);
+            };
+
+            const rawBytes = new Blob([state.rawText]).size;
+            addCard("ファイルサイズ", formatBytes(rawBytes), "JSONテキストの総物理容量");
+            addCard("キーの総数", stats.keyCount, "すべてのオブジェクトに格納されているキーの合計");
+            addCard("最大ネスト深度", stats.maxDepth, "JSONデータのネスト階層の深さレベル");
+            addCard("配列要素総数", stats.totalArrayElements, "JSON内の全配列にあるオブジェクト・値の数");
+
+            const exportArea = document.createElement('div');
+            exportArea.className = 'sm:col-span-2 bg-white dark:bg-zinc-900 p-5 rounded-lg border border-slate-200 dark:border-zinc-800 shadow-sm mt-2';
+            
+            const hasArray = stats.totalArrayElements > 0;
+            
+            exportArea.innerHTML = `
+                <h3 class="text-sm font-bold text-slate-800 dark:text-white mb-3 flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20" />
+                    </svg>
+                    エクスポート & 変換ツール
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-zinc-400 mb-4">JSONを他のフォーマットにすばやく変換します。クリップボードにコピー可能です。</p>
+                
+                <div class="flex flex-wrap gap-2">
+                    <button id="convertYamlBtn" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-lg text-xs font-semibold transition">
+                        YAMLに変換
+                    </button>
+                    <button id="convertCsvBtn" class="px-3 py-2 ${hasArray ? 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400' : 'bg-slate-100 text-slate-400 dark:bg-zinc-800 dark:text-zinc-600 cursor-not-allowed'} rounded-lg text-xs font-semibold transition" ${!hasArray ? 'disabled' : ''}>
+                        CSVに変換 (テーブル用)
+                    </button>
+                </div>
+
+                <div id="convertedCodeContainer" class="mt-4 hidden">
+                    <div class="flex justify-between items-center bg-slate-100 dark:bg-zinc-800 px-3 py-1.5 rounded-t-lg border-t border-x border-slate-200 dark:border-zinc-700 text-xs">
+                        <span id="convertedFormatLabel" class="font-bold text-slate-600 dark:text-zinc-400">YAML Code</span>
+                        <button id="copyConvertedBtn" class="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">コピー</button>
+                    </div>
+                    <pre id="convertedCodeArea" class="bg-slate-50 dark:bg-zinc-950 p-3 rounded-b-lg border border-slate-200 dark:border-zinc-700 font-mono text-xs overflow-x-auto max-h-60"></pre>
+                </div>
+            `;
+
+            statsView.appendChild(container);
+            statsView.appendChild(exportArea);
+
+            const convertYamlBtn = document.getElementById('convertYamlBtn');
+            const convertCsvBtn = document.getElementById('convertCsvBtn');
+            const convertedCodeContainer = document.getElementById('convertedCodeContainer');
+            const convertedFormatLabel = document.getElementById('convertedFormatLabel');
+            const convertedCodeArea = document.getElementById('convertedCodeArea');
+            const copyConvertedBtn = document.getElementById('copyConvertedBtn');
+
+            let currentConvertedString = '';
+
+            convertYamlBtn.addEventListener('click', () => {
+                const yaml = jsonToYaml(state.parsedJson);
+                currentConvertedString = yaml;
+                convertedCodeArea.textContent = yaml;
+                convertedFormatLabel.textContent = 'YAML';
+                convertedCodeContainer.classList.remove('hidden');
+            });
+
+            if (hasArray) {
+                convertCsvBtn.addEventListener('click', () => {
+                    const csv = jsonToCsv(state.parsedJson);
+                    currentConvertedString = csv;
+                    convertedCodeArea.textContent = csv;
+                    convertedFormatLabel.textContent = 'CSV';
+                    convertedCodeContainer.classList.remove('hidden');
+                });
+            }
+
+            copyConvertedBtn.addEventListener('click', () => {
+                copyToClipboard(currentConvertedString);
+            });
+        }
+
+        function calculateStats(obj) {
+            let stats = {
+                keyCount: 0,
+                maxDepth: 1,
+                totalArrayElements: 0
+            };
+
+            function traverse(current, depth) {
+                if (depth > stats.maxDepth) {
+                    stats.maxDepth = depth;
+                }
+
+                if (current && typeof current === 'object') {
+                    if (Array.isArray(current)) {
+                        stats.totalArrayElements += current.length;
+                        current.forEach(item => traverse(item, depth + 1));
+                    } else {
+                        const keys = Object.keys(current);
+                        stats.keyCount += keys.length;
+                        keys.forEach(key => traverse(current[key], depth + 1));
+                    }
+                }
+            }
+
+            traverse(obj, 1);
+            return stats;
+        }
+
+        function jsonToYaml(obj, depth = 0) {
+            const indent = '  '.repeat(depth);
+            if (obj === null) return 'null';
+            if (Array.isArray(obj)) {
+                if (obj.length === 0) return '[]';
+                return '\n' + obj.map(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        return `${indent}- ` + jsonToYaml(item, depth + 1).trimStart();
+                    }
+                    return `${indent}- ${jsonToYaml(item, depth + 1)}`;
+                }).join('\n');
+            }
+            if (typeof obj === 'object') {
+                const keys = Object.keys(obj);
+                if (keys.length === 0) return '{}';
+                return '\n' + keys.map(key => {
+                    const val = obj[key];
+                    const formattedKey = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key) ? key : `"${key}"`;
+                    if (typeof val === 'object' && val !== null) {
+                        return `${indent}${formattedKey}:${jsonToYaml(val, depth + 1)}`;
+                    }
+                    return `${indent}${formattedKey}: ${jsonToYaml(val, depth + 1)}`;
+                }).join('\n');
+            }
+            if (typeof obj === 'string') {
+                return obj.includes('\n') || obj.includes('"') ? `'${obj.replace(/'/g, "''")}'` : obj;
+            }
+            return String(obj);
+        }
+
+        function jsonToCsv(jsonObj) {
+            let arr = Array.isArray(jsonObj) ? jsonObj : [];
+            if (!Array.isArray(jsonObj) && typeof jsonObj === 'object') {
+                for (let k in jsonObj) {
+                    if (Array.isArray(jsonObj[k])) {
+                        arr = jsonObj[k];
+                        break;
+                    }
+                }
+            }
+
+            if (arr.length === 0) return '';
+
+            const headers = new Set();
+            arr.forEach(item => {
+                if (item && typeof item === 'object') {
+                    Object.keys(item).forEach(k => headers.add(k));
+                }
+            });
+
+            const headerArr = [...headers];
+            if (headerArr.length === 0) {
+                return 'Value\n' + arr.map(item => `"${String(item).replace(/"/g, '""')}"`).join('\n');
+            }
+
+            let csvLines = [];
+            csvLines.push(headerArr.map(h => `"${h.replace(/"/g, '""')}"`).join(','));
+
+            arr.forEach(item => {
+                const line = headerArr.map(h => {
+                    const val = item ? item[h] : '';
+                    if (val === undefined || val === null) return '';
+                    const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                    return `"${strVal.replace(/"/g, '""')}"`;
+                });
+                csvLines.push(line.join(','));
+            });
+
+            return csvLines.join('\n');
+        }
+
+
+        /* ==========================================================================
+           5. 検索機能
+           ========================================================================== */
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            state.searchQuery = query;
+
+            if (query) {
+                searchClearBtn.classList.remove('hidden');
+                autoExpandMatchingNodes(state.parsedJson, '$', query);
+            } else {
+                searchClearBtn.classList.add('hidden');
+            }
+
+            renderActiveTab();
+        });
+
+        searchClearBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            state.searchQuery = '';
+            searchClearBtn.classList.add('hidden');
+            renderActiveTab();
+        });
+
+        function autoExpandMatchingNodes(obj, currentPath, query) {
+            let hasMatch = false;
+
+            if (typeof obj === 'object' && obj !== null) {
+                const keys = Object.keys(obj);
+                keys.forEach(key => {
+                    const subPath = Array.isArray(obj) ? `${currentPath}[${key}]` : `${currentPath}.${key}`;
+                    
+                    const keyMatch = key.toLowerCase().includes(query.toLowerCase());
+                    let valMatch = false;
+                    
+                    if (typeof obj[key] !== 'object' && obj[key] !== null) {
+                        valMatch = String(obj[key]).toLowerCase().includes(query.toLowerCase());
+                    }
+
+                    const childHasMatch = autoExpandMatchingNodes(obj[key], subPath, query);
+
+                    if (keyMatch || valMatch || childHasMatch) {
+                        state.expandedNodes.add(currentPath);
+                        hasMatch = true;
+                    }
+                });
+            }
+
+            return hasMatch;
+        }
+
+        // コピータブ全体ボタン
+        document.getElementById('copyViewerBtn').addEventListener('click', () => {
+            if (!state.parsedJson) return;
+            
+            let copyText = '';
+            if (state.currentTab === 'tree') {
+                copyText = JSON.stringify(state.parsedJson, null, 2);
+            } else if (state.currentTab === 'company') {
+                copyText = JSON.stringify(state.parsedJson.companies, null, 2);
+            } else if (state.currentTab === 'table') {
+                copyText = JSON.stringify(state.parsedJson, null, 2);
+            } else if (state.currentTab === 'schema') {
+                copyText = JSON.stringify(generateSchema(state.parsedJson), null, 2);
+            } else if (state.currentTab === 'stats') {
+                const stats = calculateStats(state.parsedJson);
+                copyText = `JSON Statistics:\n- Keys: ${stats.keyCount}\n- Max Depth: ${stats.maxDepth}\n- Total Array Elements: ${stats.totalArrayElements}`;
+            }
+
+            copyToClipboard(copyText);
+        });
+
+
+        // 初期データのセットアップ (任天堂・ソニー・マイクロソフトのデータを初期適用)
+        window.addEventListener('DOMContentLoaded', () => {
+            const initialText = JSON.stringify(SAMPLE_JSON, null, 2);
+            jsonInput.value = initialText;
+            state.rawText = initialText;
+            charCount.textContent = `(${initialText.length}文字)`;
+            validateAndParse(initialText);
+        });
+
+    </script>
+</body>
+</html>
